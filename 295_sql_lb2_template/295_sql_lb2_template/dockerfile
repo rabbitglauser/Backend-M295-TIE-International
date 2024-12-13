@@ -1,0 +1,5 @@
+FROM postgres
+ENV POSTGRES_USER TIE
+ENV POSTGRES_PASSWORD TIE-International
+ENV POSTGRES_DB tie-DB
+COPY init.sql /docker-entrypoint-initdb.d/

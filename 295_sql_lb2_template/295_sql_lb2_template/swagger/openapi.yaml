@@ -1,0 +1,64 @@
+openapi: 3.0.0
+info:
+  description: This is a simple server that handles login data
+  version: 1.0.0
+  title: Crypto Login
+paths:
+  /login:
+    post:
+      summary: Add a new user into the database
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: object
+                  required:
+                    - name
+                    - address
+                    - city
+                    - phoneNumber
+                    - postcode
+                    - country
+                    - username
+                    - email
+                    - password
+                    - dateOfBirth
+                    - idConfirmation            
+                  properties:
+                    name:
+                      type: string
+                    address:
+                      type: string
+                    city:
+                      type: string
+                    phoneNumber:
+                      type: string
+                    postcode:
+                      type: string
+                    country:
+                      type: string
+                    username:
+                      type: string
+                    email:
+                      type: string
+                    password:
+                      type: string
+                    dateOfBirth:
+                      type: string
+                    idConfirmation:
+                      type: string
+                      format: binary
+      description: ''
+      operationId: createUser
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Missing File or Wrong Format
+        '405':
+          description: Necessary Unique DB entry already taken
+        '500':
+          description: Database error
