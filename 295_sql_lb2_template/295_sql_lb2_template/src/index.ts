@@ -72,3 +72,4 @@ app.post("/login", upload.single('idConfirmation'), (req: Request, res: Response
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });
+
