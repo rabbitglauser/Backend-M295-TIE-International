@@ -11,7 +11,7 @@ const port = 3002;
 
 // Configure multer for file uploads
 const upload = multer({
-    dest: "uploads/",
+    dest: path.resolve(__dirname, "../uploads"), // Save files under a directory called 'uploads'
     fileFilter: (req, file, cb) => {
         // Log file being processed
         logger.info("Processing file upload");
@@ -77,16 +77,28 @@ class AppController {
                 return;
             }
 
-            // Check if a user with the same username or email already exists
+            // Check if a user with the same email or identity document already exists in the database
             logger.info("Checking if user already exists in the database");
             const existingUser = await Users.findOne({
                 where: {
-                    [Op.or]: [{username}, {email}],
+                    [Op.or]: [{email: {[Op.eq]: email.toLowerCase()}}],
                 },
             });
+
             if (existingUser) {
-                logger.warn(`User with username '${username}' or email '${email}' already exists`); // Log existence check
-                res.status(400).json({message: "User already exists"});
+                logger.warn(`User with email '${email}' already exists`); // Log existence check
+
+                // Mark email and identity confirmations as true for existing users
+                if (!existingUser.getDataValue("email_confirmed") || !existingUser.getDataValue("identity_confirmed")) {
+                    logger.info(`Updating confirmation flags for existing user with email '${email}'`);
+                    existingUser.setDataValue("email_confirmed", true);
+                    existingUser.setDataValue("identity_confirmed", true);
+                    await existingUser.save(); // Save changes to the database
+                    res.status(200).json({message: "Updated confirmation flags for existing user"});
+                    return;
+                }
+
+                res.status(400).json({message: "User with the same email or identity already exists"});
                 return;
             }
 
@@ -125,7 +137,9 @@ class AppController {
             }
         } catch (error) {
             // Log error details
-            logger.error(`Error occurred while processing '/login': ${error instanceof Error ? error.message : "Unknown error"}`);
+            logger.error(`Error occurred while processing '/login': ${error instanceof Error ? error.message : "Unknown error"}`, {
+                dir: path.resolve(__dirname, "../logs"), // Save logs under a directory called 'logs'
+            });
             res.status(500).json({
                 message: "Internal Server Error",
                 error: error instanceof Error ? error.message : "Unknown error",
