@@ -1,4 +1,4 @@
-import express, {Application} from "express";
+import express, {Application, NextFunction, Request, Response} from "express";
 import path from "path";
 import multer from "multer";
 import bcrypt from "bcrypt";
@@ -21,7 +21,7 @@ class App {
     // Middleware initialization
     private initializeMiddleware(): void {
         // Log every incoming request with method and URL
-        this.app.use((req, res, next) => {
+        this.app.use((req: Request, res: Response, next: NextFunction) => {
             logger.info(`Incoming Request: ${req.method} ${req.url}`);
             next(); // Proceed to next middleware or route
         });
@@ -45,7 +45,7 @@ class App {
     private configureMulter(): multer.Multer {
         return multer({
             dest: path.resolve(__dirname, "../uploads"), // Destination directory for uploaded files
-            fileFilter: (req, file, cb) => {
+            fileFilter: (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
                 logger.info("Processing file upload"); // Log file upload attempt
 
                 const allowedTypes = ["image/jpeg", "image/png", "image/jpg", "application/pdf"]; // Allowed file types
@@ -72,7 +72,7 @@ class App {
 
 class AppController {
     // Handle login route logic
-    public static async handleLogin(req: express.Request, res: express.Response): Promise<void> {
+    public static async handleLogin(req: Request, res: Response): Promise<void> {
         try {
             logger.info("Received request to '/login'"); // Log receipt of login request
             logger.info("File uploaded: " + JSON.stringify(req.file || {})); // Log the uploaded file details
@@ -110,7 +110,7 @@ class AppController {
             logger.info("Validating input data for missing fields");
             if (!name || !address || !city || !phoneNumber || !postcode || !country || !username || !email || !password || !dateOfBirth) {
                 logger.error("Validation failed: Missing required fields"); // Log validation error
-                res.status(400).json({message: "Missing required fields"});
+                res.status(400).send({message: "Missing required fields"});
                 return;
             }
 
@@ -118,24 +118,33 @@ class AppController {
             logger.info("Checking if user already exists in the database");
             const existingUser = await Users.findOne({
                 where: {
-                    [Op.or]: [{email: {[Op.eq]: email.toLowerCase()}}],
+                    [Op.or]: [
+                        {email: {[Op.eq]: email.toLowerCase()}},
+                        {username: {[Op.eq]: username}},
+                    ],
                 },
             });
 
             if (existingUser) {
-                logger.warn(`User with email '${email}' already exists`); // Log existing user
-                // If user exists but their confirmation flags are not set, update them
-                if (!existingUser.getDataValue("email_confirmed") || !existingUser.getDataValue("identity_confirmed")) {
-                    logger.info(`Updating confirmation flags for existing user with email '${email}'`);
-                    existingUser.setDataValue("email_confirmed", true);
-                    existingUser.setDataValue("identity_confirmed", true);
-                    await existingUser.save(); // Save updated user details
-                    res.status(200).json({message: "Updated confirmation flags for existing user"});
+                const isEmailDuplicate = (existingUser as any).email?.toLowerCase() === email.toLowerCase();
+                const isUsernameDuplicate = (existingUser as any).username === username;
+
+                logger.warn(
+                    `User already exists. Email duplicate: ${isEmailDuplicate}, Username duplicate: ${isUsernameDuplicate}`
+                );
+
+                if (isEmailDuplicate && isUsernameDuplicate) {
+                    res.status(405).send("Duplicate Username and Email");
                     return;
                 }
-
-                res.status(400).json({message: "User with the same email or identity already exists"}); // Return error if user exists
-                return;
+                if (isUsernameDuplicate) {
+                    res.status(405).send("Username already taken");
+                    return;
+                }
+                if (isEmailDuplicate) {
+                    res.status(405).send("Email already taken");
+                    return;
+                }
             }
 
             // Create salt for hashing password
@@ -166,16 +175,17 @@ class AppController {
             if (newUser) {
                 logger.info(`User '${username}' registered successfully`); // Log success registration
                 res.status(200).send("OK"); // Send success response
-            } else {
+                return;
+            }
+            if (!newUser) {
                 logger.error(`Failed to register user '${username}'`); // Log registration failure
-                res.status(500).json({message: "Failed to register user"}); // Send error response
+                res.status(500).send({message: "Failed to register user"}); // Send error response
+                return;
             }
         } catch (error) {
             // Log any unexpected errors
-            logger.error(`Error occurred while processing '/login': ${error instanceof Error ? error.message : "Unknown error"}`, {
-                dir: path.resolve(__dirname, "../logs"),
-            });
-            res.status(500).json({
+            logger.error(`Error occurred while processing '/login': ${error instanceof Error ? error.message : "Unknown error"}`);
+            res.status(500).send({
                 message: "Internal Server Error",
                 error: error instanceof Error ? error.message : "Unknown error",
             });
