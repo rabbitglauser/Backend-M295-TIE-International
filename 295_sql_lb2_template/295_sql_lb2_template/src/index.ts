@@ -6,6 +6,7 @@ import {Users} from "./db_connection";
 import logger from "./logger"; // Logger utility for logging
 import {Op} from "sequelize";
 
+// Main application class
 class App {
     private app: Application;
     private port: number;
@@ -14,49 +15,54 @@ class App {
         this.app = express();
         this.port = port;
 
-        this.initializeMiddleware(); // Initialize middleware handlers
-        this.initializeRoutes(); // Set up routes
+        // Initialize middleware and routes
+        this.initializeMiddleware(); // Middleware initialization for handling requests
+        this.initializeRoutes(); // Route setup for application features
     }
 
-    // Middleware initialization
+    // Middleware initialization for the application
     private initializeMiddleware(): void {
-        // Log every incoming request with method and URL
+        // Logging each incoming request with method and URL
         this.app.use((req: Request, res: Response, next: NextFunction) => {
             logger.info(`Incoming Request: ${req.method} ${req.url}`);
-            next(); // Proceed to next middleware or route
+            next(); // Proceed to handle other middleware or routes
         });
 
-        this.app.use(express.json()); // Parse JSON data in request body
-        this.app.use(express.urlencoded({extended: true})); // Parse URL-encoded data
+        this.app.use(express.json()); // Middleware to parse JSON payloads in requests
+        this.app.use(express.urlencoded({extended: true})); // For parsing URL-encoded request bodies
 
-        // Serve static files from the client build directory
+        // Serve static files from the "client/build" directory
         this.app.use(express.static(path.resolve(__dirname, "../client/build")));
     }
 
-    // Initialize routes for the application
+    // Route initialization
     private initializeRoutes(): void {
-        const upload = this.configureMulter(); // Configure multer for file uploads
+        // Configure multer for file uploads
+        const upload = this.configureMulter();
 
-        // Route for handling login requests
+        logger.info("Initializing application routes"); // Log route setup process
+
+        // POST route for user login requests
         this.app.post("/login", upload.single("idConfirmation"), AppController.handleLogin);
     }
 
-    // Configures multer for file uploads
+    // Multer configuration for handling file uploads
     private configureMulter(): multer.Multer {
         return multer({
-            dest: path.resolve(__dirname, "../uploads"), // Destination directory for uploaded files
+            dest: path.resolve(__dirname, "../uploads"), // Directory for storing uploaded files
             fileFilter: (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-                logger.info("Processing file upload"); // Log file upload attempt
+                logger.info("Processing file upload"); // Log start of file upload processing
 
-                const allowedTypes = ["image/jpeg", "image/png", "image/jpg", "application/pdf"]; // Allowed file types
+                // Allowed file types for uploads
+                const allowedTypes = ["image/jpeg", "image/png", "image/jpg", "application/pdf"];
 
-                // Check if uploaded file type is allowed
+                // Validate file type
                 if (allowedTypes.includes(file.mimetype)) {
-                    logger.info(`Valid file type: ${file.mimetype}`); // Log if file type is valid
-                    cb(null, true); // Accept file
+                    logger.info(`Valid file type: ${file.mimetype}`); // Log valid file type
+                    cb(null, true); // Accept file for upload
                 } else {
-                    logger.error(`Invalid file type uploaded: ${file.mimetype}`); // Log invalid file type
-                    cb(new Error("Invalid file type")); // Reject file
+                    logger.error(`Invalid file type uploaded: ${file.mimetype}`); // Log invalid file type error
+                    cb(new Error("Invalid file type")); // Reject file upload
                 }
             },
         });
@@ -65,19 +71,20 @@ class App {
     // Start the server on the defined port
     public start(): void {
         this.app.listen(this.port, () => {
-            logger.info(`Server running on port ${this.port}`); // Log server start
+            logger.info(`Server running on port ${this.port}`); // Log server start message
         });
     }
 }
 
+// Controller class to handle application-level logic
 class AppController {
-    // Handle login route logic
+    // Login route handler
     public static async handleLogin(req: Request, res: Response): Promise<void> {
         try {
-            logger.info("Received request to '/login'"); // Log receipt of login request
-            logger.info("File uploaded: " + JSON.stringify(req.file || {})); // Log the uploaded file details
+            logger.info("Received request to '/login'"); // Log request initiation
+            logger.info("File uploaded: " + JSON.stringify(req.file || {})); // Log uploaded file details
 
-            // Destructure incoming form data
+            // Extract form data from the request
             const {
                 name,
                 address,
@@ -91,7 +98,7 @@ class AppController {
                 dateOfBirth,
             } = req.body;
 
-            logger.info("Extracting form data"); // Log extraction of form data
+            logger.info("Extracting form data from request body"); // Log data extraction
             logger.info(
                 `Extracted data: ${JSON.stringify({
                     name,
@@ -106,16 +113,16 @@ class AppController {
                 })}`
             );
 
-            // Validate required fields
-            logger.info("Validating input data for missing fields");
+            // Validate required fields in the extracted data
             if (!name || !address || !city || !phoneNumber || !postcode || !country || !username || !email || !password || !dateOfBirth) {
-                logger.error("Validation failed: Missing required fields"); // Log validation error
+                logger.error("Validation failed: Missing required fields"); // Log missing fields error
                 res.status(400).send({message: "Missing required fields"});
                 return;
             }
 
-            // Check if the user already exists in the database
-            logger.info("Checking if user already exists in the database");
+            logger.info("Checking the database for existing user records"); // Log user existence check
+
+            // Query the database for existing users with the same credentials
             const existingUser = await Users.findOne({
                 where: {
                     [Op.or]: [
@@ -125,6 +132,7 @@ class AppController {
                 },
             });
 
+            // Handle case where user already exists
             if (existingUser) {
                 const isEmailDuplicate = (existingUser as any).email?.toLowerCase() === email.toLowerCase();
                 const isUsernameDuplicate = (existingUser as any).username === username;
@@ -147,16 +155,14 @@ class AppController {
                 }
             }
 
-            // Create salt for hashing password
-            logger.info("Creating salt for password hashing");
-            const salt = bcrypt.genSaltSync(10);
+            // Hashing passwords for secure storage
+            logger.info("Generating salt for password hashing"); // Log salt generation
+            const salt = bcrypt.genSaltSync(10); // Generate password salt
 
-            // Hash the user's password
-            logger.info("Hashing the user's password");
-            const hashedPassword = bcrypt.hashSync(password, salt);
+            logger.info("Hashing the user's password"); // Log password hashing
+            const hashedPassword = bcrypt.hashSync(password, salt); // Hash user's password
 
-            // Save new user to the database
-            logger.info("Saving new user to the database");
+            logger.info("Saving new user to the database"); // Log user save process
             const newUser = await Users.create({
                 username,
                 password: hashedPassword,
@@ -173,17 +179,14 @@ class AppController {
             });
 
             if (newUser) {
-                logger.info(`User '${username}' registered successfully`); // Log success registration
+                logger.info(`User '${username}' registered successfully`); // Log successful registration
                 res.status(200).send("OK"); // Send success response
                 return;
             }
-            if (!newUser) {
-                logger.error(`Failed to register user '${username}'`); // Log registration failure
-                res.status(500).send({message: "Failed to register user"}); // Send error response
-                return;
-            }
+
+            logger.error(`Failed to register user '${username}'`); // Log user registration failure
+            res.status(500).send({message: "Failed to register user"});
         } catch (error) {
-            // Log any unexpected errors
             logger.error(`Error occurred while processing '/login': ${error instanceof Error ? error.message : "Unknown error"}`);
             res.status(500).send({
                 message: "Internal Server Error",
